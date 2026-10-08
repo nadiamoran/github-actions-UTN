@@ -1,5 +1,19 @@
 # Sistema de Autoservicio - Tienda Los Vigilantes
 
+[![CI](https://github.com/nadiamoran/github-actions-UTN/actions/workflows/ci.yml/badge.svg)](https://github.com/nadiamoran/github-actions-UTN/actions/workflows/ci.yml)
+
+## 🧪 Tests y CI (GitHub Actions)
+
+Suite **pytest** (`tests/`) sobre la API del backend: le pega por HTTP al backend levantado y verifica el estado de MySQL. **Atención:** antes de cada test vacía y recarga la tabla `productos`, así que se tiene que correr contra una base de prueba.
+
+```bash
+pip install -r requirements-test.txt
+cd backend && npm start     # con la base de prueba configurada en .env
+pytest --html=reports/pytest-report.html --self-contained-html
+```
+
+El workflow [`.github/workflows/ci.yml`](.github/workflows/ci.yml) corre en cada pull request contra `main`: levanta MySQL 8 como service container, arranca el backend, ejecuta pytest y publica el reporte como artifact. La rama `main` está protegida: el merge solo se habilita si el check **Tests API (pytest)** pasa.
+
 Originalmente este proyecto era el proyecto final de programación 3 consiste en una aplicación de **Autoservicio** (Kiosco digital) intuitivo donde el usuario no deba escribir ningúna ruta a mano. Contando tambíen con un panel de administración (Backoffice) para la gestión de productos y ventas. 
 
 ## 📋 Integrantes del Grupo

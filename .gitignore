@@ -1,0 +1,13 @@
+# Variables de entorno reales (nunca se suben)
+.env
+
+# Dependencias
+node_modules/
+
+
+# Python / reportes de pytest
+.venv/
+__pycache__/
+.pytest_cache/
+reports/
+backend.log
