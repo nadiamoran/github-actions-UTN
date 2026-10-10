@@ -1,0 +1,158 @@
+# =============================================================================
+# Workflow de Integración Continua (CI) - Los Vigilantes
+# -----------------------------------------------------------------------------
+# En cada pull request contra main:
+#   1. Levanta un MySQL 8 como "service container".
+#   2. Instala y arranca el backend (Node + Express + Sequelize) de la Actividad 2.
+#   3. Corre la suite pytest, que le pega por HTTP a la API y verifica la base.
+#   4. Publica el reporte HTML de pytest como artifact.
+#
+# El resultado del job se reporta como "status check" en el PR. Una branch
+# protection rule sobre main exige que ese check pase para habilitar el merge
+# (quality gate).
+#
+# Jerarquía: workflow (este archivo) > jobs (api-tests) > steps > actions.
+#            Cada job corre en un runner (VM hospedada por GitHub).
+# =============================================================================
+
+# Nombre del workflow: aparece en la pestaña "Actions" y en el badge del README
+name: CI
+
+# -----------------------------------------------------------------------------
+# Eventos de disparo (triggers)
+# -----------------------------------------------------------------------------
+on:
+  # Al abrir un PR contra main y en cada push nuevo a la rama de ese PR
+  pull_request:
+    branches: [main]
+
+  # Cuando el código entra a main (mantiene actualizado el badge)
+  push:
+    branches: [main]
+
+  # Ejecución manual desde la pestaña Actions
+  workflow_dispatch:
+
+# Si llega un push nuevo al mismo PR, cancela la corrida anterior en curso
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# Permisos mínimos del GITHUB_TOKEN: solo lectura del código
+permissions:
+  contents: read
+
+# Variables de entorno compartidas por todos los steps del job.
+# Son credenciales descartables de una base efímera que solo existe durante
+# la corrida, por eso pueden ir en texto plano (no son secretos reales).
+env:
+  MYSQL_ROOT_PASSWORD: root_ci
+  MYSQL_DATABASE: los_vigilantes_test
+  MYSQL_USER: vigilantes
+  MYSQL_PASSWORD: vigilantes_ci
+  MYSQL_HOST: 127.0.0.1
+  MYSQL_PORT: 3306
+  PORT: 3000
+  SESSION_SECRET: secreto_ci
+  API_URL: http://localhost:3000
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Job único. Su "name" es el nombre del status check que se elige como
+  # obligatorio en la branch protection rule.
+  # ---------------------------------------------------------------------------
+  api-tests:
+    name: Tests API (pytest)
+    runs-on: ubuntu-latest
+    # Corta el job si se cuelga, para no consumir minutos de más
+    timeout-minutes: 15
+
+    # Contenedores auxiliares que viven mientras dura el job
+    services:
+      mysql:
+        image: mysql:8.0
+        # Mismas variables que en el docker-compose de la Actividad 2.
+        # (El contexto "env" no está disponible acá, por eso se repiten.)
+        env:
+          MYSQL_ROOT_PASSWORD: root_ci
+          MYSQL_DATABASE: los_vigilantes_test
+          MYSQL_USER: vigilantes
+          MYSQL_PASSWORD: vigilantes_ci
+        ports:
+          - 3306:3306
+        # Healthcheck: el job no arranca los steps hasta que MySQL responde
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot_ci"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+
+    steps:
+      # 1) Descarga el código en el runner.
+      #    En un pull_request hace checkout del merge del PR con main.
+      - name: Checkout del código
+        uses: actions/checkout@v4
+
+      # 2) Node.js con cache de npm. La clave del cache sale del
+      #    package-lock.json del backend: si no cambió, se reutiliza.
+      - name: Configurar Node.js (cache de npm)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      # 3) Instala las dependencias exactas del lock del backend
+      - name: Instalar dependencias del backend
+        working-directory: backend
+        run: npm ci
+
+      # 4) Arranca el backend en segundo plano. Al iniciar, Sequelize crea las
+      #    tablas (sync) y los usuarios admin/tester. La salida va a un log
+      #    que después se publica junto con el reporte.
+      - name: Levantar backend
+        working-directory: backend
+        run: nohup npm start > ../backend.log 2>&1 &
+
+      # 5) Python 3.11 con cache de pip (clave: requirements-test.txt)
+      - name: Configurar Python (cache de pip)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: requirements-test.txt
+
+      # 6) Instala el entorno de pytest
+      - name: Instalar dependencias de pytest
+        run: pip install -r requirements-test.txt
+
+      # 7) Espera a que la API responda (máx. 60 s) antes de correr los tests
+      - name: Esperar a que el backend esté listo
+        run: |
+          for i in $(seq 1 60); do
+            curl -sf "$API_URL/admin/api/productos" > /dev/null && echo "Backend listo" && exit 0
+            sleep 1
+          done
+          echo "El backend no levantó a tiempo"; cat backend.log; exit 1
+
+      # 8) Ejecuta la suite. Si falla algún test, pytest termina con código
+      #    distinto de 0: el job falla y el check del PR queda en rojo.
+      #    Genera un reporte HTML autocontenido y un XML JUnit.
+      - name: Ejecutar tests con pytest
+        run: >-
+          pytest
+          --html=reports/pytest-report.html --self-contained-html
+          --junitxml=reports/junit.xml
+
+      # 9) Publica los reportes como artifact del workflow.
+      #    "if: always()" lo sube aunque los tests fallen: es justo cuando más
+      #    sirve tener el detalle del error.
+      - name: Publicar reporte de tests
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-report
+          path: |
+            reports/
+            backend.log
+          retention-days: 30

@@ -7,7 +7,9 @@ import bcrypt from "bcryptjs";
 
 //METODOS GET
 
-export const getPaginaLogin = async (req, res) => {
+// Renderiza el login con todas las variables que usa la vista (title y la card del tester).
+// Se reutiliza en el POST para mostrar el mensaje de error sin romper la plantilla.
+const renderLogin = async (res, error = null) => {
     let emailTester = "Bruno Díaz";
     let passwordTester = "BatmanLoMejor";
 
@@ -27,8 +29,13 @@ export const getPaginaLogin = async (req, res) => {
     res.render('login', { 
         title: 'Iniciar sesión - Admin',
         emailTester: emailTester,
-        passwordTester: passwordTester
+        passwordTester: passwordTester,
+        error: error
     }); 
+};
+
+export const getPaginaLogin = async (req, res) => {
+    await renderLogin(res);
 };
 
 export const getPaginaDashboard = async (req, res) => {
@@ -136,13 +143,13 @@ export const postPaginaLogin = async (req, res) => {
         });
         
         if (!usuario) {
-            return res.render('login', { error: 'Usuario o contraseña incorrectos' });
+            return renderLogin(res, 'Usuario o contraseña incorrectos');
         }
 
         const esPasswordCorrecta = await bcrypt.compare(password, usuario.password);
 
         if (!esPasswordCorrecta) {
-            return res.render('login', { error: 'Usuario o contraseña incorrectos' });
+            return renderLogin(res, 'Usuario o contraseña incorrectos');
         }
 
         req.session.usuarioId = usuario.id;
@@ -152,7 +159,7 @@ export const postPaginaLogin = async (req, res) => {
 
     } catch (error) {
         console.error("Error en postPaginaLogin:", error);
-        res.render('login', { error: 'Ocurrió un error inesperado. Por favor, intente de nuevo.' });
+        await renderLogin(res, 'Ocurrió un error inesperado. Por favor, intente de nuevo.');
     }
 };
 
