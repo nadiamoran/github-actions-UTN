@@ -280,7 +280,7 @@ export const postDevolverProducto = async (req, res) => {
     const producto = await Producto.findByPk(id);
 
     if (producto) {
-        producto.stock += cantidad;
+        producto.stock -= cantidad;
         await producto.save();
         res.status(200).json({ success: true, message: "Producto devuelto" });
     } else {
