@@ -62,6 +62,7 @@ La primera corrida del workflow ([run #1](https://github.com/nadiamoran/github-a
 > ⚠️ Los tests vacían la tabla `productos`: usar siempre una base de **prueba**.
 
 ```bash
+# En PowerShell usar: Copy-Item .env.example .env
 cp .env.example .env              # completar con los datos de la base de prueba
 cd backend && npm ci && npm start # en otra terminal
 pip install -r requirements-test.txt
