@@ -71,8 +71,7 @@ jobs:
     services:
       mysql:
         image: mysql:8.0
-        # Mismas variables que en el docker-compose de la Actividad 2.
-        # (El contexto "env" no está disponible acá, por eso se repiten.)
+        # Mismas credenciales que el bloque env de arriba (base efímera, solo para el CI).        # (El contexto "env" no está disponible acá, por eso se repiten.)
         env:
           MYSQL_ROOT_PASSWORD: root_ci
           MYSQL_DATABASE: los_vigilantes_test
